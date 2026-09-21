@@ -1627,7 +1627,7 @@ if (C !== 'main') {
 const loadingEl = $('#loading'); 
 if (loadingEl) loadingEl.remove();
 
-window.addEventListener('focus', () => { if (REMOTE && me && view.name !== 'detail') maybeRefresh().then(render); });
+window.addEventListener('focus', () => { if (REMOTE && me && view.name !== 'detail') remoteLoad().then(render); });
 
 render();
 
