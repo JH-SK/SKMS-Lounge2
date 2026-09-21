@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
-<meta property="og:title" content="SKMS Lounge22 (문항 List)">
+<meta property="og:title" content="SKMS Lounge - SKMS에 대해 어떻게 생각하세요?">
 <meta property="og:description" content="SKMS에 대한 나의 생각을 남기고, 함께 Design해요.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#EB5A47">
@@ -220,6 +220,20 @@ header.top .in { max-width: var(--w); margin: 0 auto; padding: 12px 20px; displa
 .sent.mine { box-shadow: inset 0 0 0 1.5px var(--blue); }
 .theme .add { margin-top: 12px; display: flex; gap: 8px; }
 
+/* AI 카드 전용 스타일 (우측 여백 100% 가로 너비 확장 및 스타일링) */
+.ai-card { background: linear-gradient(135deg, #FFF0ED 0%, #FAF8F6 100%); border: 1.5px solid #FFD4D0; border-radius: var(--radius); padding: 20px; margin-top: 16px; box-shadow: var(--shadow); width: 100%; box-sizing: border-box; }
+.ai-card.dark { background: linear-gradient(135deg, #1F2328 0%, #2D333B 100%); color: #fff; border: 1px solid var(--ink-2); }
+.ai-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--blue); color: #fff; font-size: .75rem; font-weight: 800; padding: 3px 10px; border-radius: 999px; margin-bottom: 10px; letter-spacing: -.01em; }
+.ai-card.dark .ai-badge { background: #FF6B59; }
+.ai-card h3 { font-size: 1.05rem; font-weight: 800; line-height: 1.35; margin-bottom: 8px; }
+.ai-card p { font-size: .93rem; line-height: 1.6; color: var(--ink-2); word-break: keep-all; }
+.ai-card.dark p { color: rgba(255,255,255,.85); }
+.ai-card .ai-bullets { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.ai-card .ai-bullet { display: flex; align-items: flex-start; gap: 6px; font-size: .88rem; line-height: 1.5; color: var(--ink); }
+.ai-card.dark .ai-bullet { color: rgba(255,255,255,.92); }
+.ai-card .ai-bullet::before { content: "•"; color: var(--blue); font-weight: bold; font-size: 1.1rem; line-height: 1; }
+.ai-card.dark .ai-bullet::before { color: #FF6B59; }
+
 /* ideas */
 .topics { display: flex; gap: 8px; overflow-x: auto; margin-top: 14px; scrollbar-width: none; padding-bottom: 2px; }
 .topics::-webkit-scrollbar { display: none; }
@@ -367,10 +381,11 @@ const DEFAULT_TOPICS = [
 
 const FINAL = { id: 'final', tag: '종합', prompt: '그래서, 내가 생각하는 SKMS는', fill: '내가 생각하는 SKMS는 ___' };
 
+// ERRC 순서 정렬: Raise -> Eliminate & Reduce -> Create
 const ERRC_TOPICS = [
- { id: 'errc_e', tag: 'E/R', title: '버리거나 줄일 것 (Eliminate & Reduce)', prompt: 'SKMS 실천을 위해 우리가 과감히 버리거나 줄여야 할 것' },
- { id: 'errc_r', tag: 'R', title: '강화하고 키울 것 (Raise)', prompt: 'SKMS 문화 정착을 위해 더 강하게 추진하고 높여야 할 것' },
- { id: 'errc_c', tag: 'C', title: '새로 시도할 것 (Create)', prompt: 'Next SKMS를 위해 새롭게 시도하거나 만들고 싶은 것' }
+ { id: 'errc_r', tag: 'Raise', title: '지키고, 강화할 것', prompt: 'SKMS 문화 정착을 위해 더 강하게 추진하고 높여야 할 것' },
+ { id: 'errc_e', tag: 'Eliminate & Reduce', title: '보완/줄여야할 것', prompt: 'SKMS 실천을 위해 우리가 과감히 버리거나 줄여야 할 것' },
+ { id: 'errc_c', tag: 'Create', title: '새롭게 추가할 것', prompt: 'Next SKMS를 위해 새롭게 시도하거나 만들고 싶은 것' }
 ];
 
 const CFG = window.SKMS_CONFIG || {};
@@ -402,7 +417,9 @@ function defaultSettings(name) {
     companies: DEFAULT_COMPANIES.slice(),
     agendas: JSON.parse(JSON.stringify(DEFAULT_AGENDAS)),
     ideasEnabled: true, ideasPublic: true,
-    ideaTopics: JSON.parse(JSON.stringify(DEFAULT_TOPICS))
+    ideaTopics: JSON.parse(JSON.stringify(DEFAULT_TOPICS)),
+    aiErrcSummary: null,
+    aiResultsBriefing: null
   };
 }
 
@@ -512,14 +529,12 @@ const DB = {
   async delComment(id) { localSave(); if (REMOTE) return remoteTry(() => sb.from('comments').delete().eq('id', id).then(r => { if (r.error) throw r.error; })); return true; },
   async like(tid, uid, on) { localSave(); if (REMOTE) return remoteTry(() => (on ? sb.from('likes').insert({ tid, uid, campaign: C }) : sb.from('likes').delete().eq('tid', tid).eq('uid', uid)).then(r => { if (r.error && r.error.code !== '23505') throw r.error; })); return true; },
   
-  // 설정 및 문항 저장 기능
   async saveSettings() {
     localSave();
     if (REMOTE) return remoteTry(() => sb.from('settings').upsert({ id: C, data: S.settings }).then(r => { if (r.error) throw r.error; }));
     return true;
   },
 
-  // 데이터 전체 초기화 기능
   async resetData() {
     S.votes = []; S.sentences = []; S.ideas = []; S.comments = []; S.likes = []; S.users = [];
     localSave();
@@ -596,6 +611,64 @@ function tally(aid, filter) {
   const c = { agree: 0, unsure: 0, disagree: 0 };
   vs.forEach(v => { if (c[v.stance] !== undefined) c[v.stance]++; });
   return { n: vs.length, ...c, pa: pct(c.agree, vs.length), pu: pct(c.unsure, vs.length), pd: pct(c.disagree, vs.length), votes: vs };
+}
+
+/* ================= AI 요약 및 브리핑 생성 로직 ================= */
+function getAiErrcSummary() {
+  if (S.settings && S.settings.aiErrcSummary) return S.settings.aiErrcSummary;
+  const sentences = S.sentences || [];
+  const rList = sentences.filter(s => s.aid === 'errc_r' && !s.hidden);
+  const eList = sentences.filter(s => s.aid === 'errc_e' && !s.hidden);
+  const cList = sentences.filter(s => s.aid === 'errc_c' && !s.hidden);
+  
+  const total = rList.length + eList.length + cList.length;
+  if (!total) {
+    return {
+      title: "아직 등록된 ERRC 제안이 없습니다",
+      bullets: ["구성원들의 제안이 등록되면 AI가 핵심 실천 과제를 3초 요약해 드립니다."]
+    };
+  }
+
+  const bullets = [];
+  if (rList.length) bullets.push(`[Raise] ${rList[0].body.slice(0, 48)}${rList[0].body.length > 48 ? '...' : ''}`);
+  if (eList.length) bullets.push(`[Eliminate & Reduce] ${eList[0].body.slice(0, 48)}${eList[0].body.length > 48 ? '...' : ''}`);
+  if (cList.length) bullets.push(`[Create] ${cList[0].body.slice(0, 48)}${cList[0].body.length > 48 ? '...' : ''}`);
+
+  return {
+    title: `총 ${total}개 제안 기반 핵심 실천 요약`,
+    bullets: bullets.length ? bullets : ["구성원들이 제시한 주요 Next SKMS 실천 아이디어입니다."]
+  };
+}
+
+function getAiResultsBriefing(filter) {
+  if (S.settings && S.settings.aiResultsBriefing) return S.settings.aiResultsBriefing;
+  const list = activeAgendas();
+  const rows = list.map(a => ({ a, t: tally(a.id, filter) })).filter(r => r.t.n >= MIN_N);
+  if (!rows.length) {
+    return {
+      title: "데이터 집계 중입니다",
+      desc: "응답 데이터가 더 모이면 AI가 전체 투표 경향과 주요 인식 차이를 자동 요약해 드립니다."
+    };
+  }
+  const gap = r => r.t.pa - r.t.pd;
+  const sorted = rows.slice().sort((x, y) => gap(y) - gap(x));
+  const topAgree = sorted[0];
+  const contested = rows.slice().sort((x, y) => Math.abs(gap(x)) - Math.abs(gap(y)))[0];
+
+  return {
+    title: "구성원 인식 핵심 브리핑",
+    desc: `현재 참여한 구성원들은 '${topAgree ? topAgree.a.tag : '핵심 가치'}' 영역에 가장 큰 공감을 보인 반면, '${contested ? contested.a.tag : '실천 방식'}' 항목에서는 관점 차이가 비교적 크게 나타나고 있습니다.`
+  };
+}
+
+function refreshAiSummaries() {
+  delete S.settings.aiErrcSummary;
+  delete S.settings.aiResultsBriefing;
+  const errc = getAiErrcSummary();
+  const res = getAiResultsBriefing(ovFilter);
+  S.settings.aiErrcSummary = errc;
+  S.settings.aiResultsBriefing = res;
+  return { errc, res };
 }
 
 const segs = (t, min) => ['a', 'u', 'd'].map((k, i) => { const p = [t.pa, t.pu, t.pd][i]; return `<i class="${k}" style="width:${p}%">${p >= min ? p + '%' : ''}</i>`; }).join('');
@@ -676,7 +749,7 @@ function renderGate(app) {
     app.innerHTML = `<div class="step" style="padding-top:36px">
       <p class="tiny" style="color:var(--blue);font-weight:700">${esc((S && S.settings && S.settings.name) || 'SKMS Lounge')}</p>
       <h1 style="margin-top:6px">SKMS에 대해<br>어떻게 생각하세요?</h1>
-      <p class="muted" style="margin-top:12px;font-size:1.02rem">열 가지 생각거리에 답하고, 나만의 SKMS 한 줄을 남겨 주세요. 구성원 전체의 생각은 답한 뒤 바로 볼 수 있어요.</p>
+      <p class="muted" style="margin-top:12px;font-size:1.02rem">SKMS 생각을 답하고, 나만의 SKMS 한 줄을 남겨 주세요. 구성원 전체의 생각은 답한 뒤 바로 볼 수 있어요.</p>
       ${(S && S.settings && S.settings.notice) ? `<div class="banner">${esc(S.settings.notice)}</div>` : ''}
       <div style="display:flex;flex-direction:column;gap:14px;margin-top:26px">
         <div class="field"><label for="gName">이름</label><input id="gName" value="${esc(gate.name)}" placeholder="홍길동" maxlength="20" autocomplete="name"></div>
@@ -736,7 +809,13 @@ function renderGate(app) {
       if (u.name !== gate.name) { u.name = gate.name; await DB.user(u); }
       me = u;
       try { localStorage.setItem(KEYC + '_me', JSON.stringify(me)); } catch (e) {}
-      go({ name: 'home' });
+      
+      const list = orderedAgendas();
+      if (list.length > 0) {
+        go({ name: 'detail', aid: list[0].id, phase: 'ask' });
+      } else {
+        go({ name: 'home' });
+      }
     };
   } else if (s === 1) {
     const cos = (S && S.settings && S.settings.companies) || DEFAULT_COMPANIES;
@@ -795,7 +874,13 @@ function renderGate(app) {
         try { localStorage.setItem(KEYC + '_me', JSON.stringify(me)); } catch (e) {}
         
         DB.user(u);
-        go({ name: 'home' });
+        
+        const list = orderedAgendas();
+        if (list.length > 0) {
+          go({ name: 'detail', aid: list[0].id, phase: 'ask' });
+        } else {
+          go({ name: 'home' });
+        }
       };
     }
   }
@@ -849,8 +934,7 @@ function renderDetail(app) {
   const idx = list.findIndex(x => x.id === a.id);
   const closed = isClosed();
 
-  // 상단 좌측 '←' 화살표 버튼 복원
-  const backBtn = '<button class="back" id="back" type="button" aria-label="뒤로가기"></button>';
+  const backBtn = idx > 0 ? '<button class="back" id="back" type="button" aria-label="뒤로가기"></button>' : '';
   const head = isFinal 
     ? `${backBtn}<p class="d-ctx">종합 정리</p>`
     : `${backBtn}<p class="d-ctx">${esc(a.tag)} · ${idx + 1}/${list.length}</p><div class="d-st">“${esc(a.statement)}”</div><p class="d-ctx">${esc(a.context)}</p>`;
@@ -899,14 +983,14 @@ function renderDetail(app) {
     };
     
     const sb = $('#submit'); 
-if (sb) sb.onclick = () => {
-  const reason = ta ? ta.value.trim() : '';
-  if (!reason) {
-    toast('한 글자 이상 적어주세요.');
-    return;
-  }
-  commit(reason);
-};
+    if (sb) sb.onclick = () => {
+      const reason = ta ? ta.value.trim() : '';
+      if (!reason) {
+        toast('한 글자 이상 적어주세요.');
+        return;
+      }
+      commit(reason);
+    };
 
   } else if (view.phase === 'line') {
     const msx = mySentence(a.id);
@@ -929,47 +1013,44 @@ if (sb) sb.onclick = () => {
     }
     const bk = $('#back'); if (bk) bk.onclick = () => goBack();
 
-// 제출 완료 후 안내 팝업을 띄우는 함수
-const showCompletionModal = () => {
-  const modal = document.createElement('div');
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);';
-  modal.innerHTML = `
-    <div style="background:#fff;border-radius:24px;padding:28px 22px;max-width:380px;width:100%;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.2);animation:in .25s ease both;">
-      <div style="font-size:2.2rem;margin-bottom:8px;">🎉</div>
-      <h2 style="font-size:1.3rem;font-weight:900;color:var(--ink);margin-bottom:10px;">소중한 의견 감사합니다!</h2>
-      <p style="font-size:0.95rem;color:var(--ink-2);line-height:1.55;word-break:keep-all;margin-bottom:22px;">
-        설문 작성이 완료되었습니다.<br>
-        Lounge의 다양한 메뉴를 통해 SKMS에 대한 더 풍성한 이야기를 나눠보세요!
-      </p>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <button type="button" class="btn" id="mGoErrc" style="background:var(--blue);color:#fff;">💡 ERRC 실천 제안하러 가기</button>
-        <button type="button" class="btn sub" id="mGoIdeas">💬 Next SKMS 아이디어 나누기</button>
-        <button type="button" class="btn sub" id="mGoOurs" style="background:none;color:var(--ink-3);font-size:0.88rem;padding:8px;">우리의 SKMS 둘러보기</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
+    const showCompletionModal = () => {
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);';
+      modal.innerHTML = `
+        <div style="background:#fff;border-radius:24px;padding:28px 22px;max-width:380px;width:100%;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.2);animation:in .25s ease both;">
+          <div style="font-size:2.2rem;margin-bottom:8px;">🎉</div>
+          <h2 style="font-size:1.3rem;font-weight:900;color:var(--ink);margin-bottom:10px;">소중한 의견 감사합니다!</h2>
+          <p style="font-size:0.95rem;color:var(--ink-2);line-height:1.55;word-break:keep-all;margin-bottom:22px;">
+            설문 작성이 완료되었습니다.<br>
+            Lounge의 다양한 메뉴를 통해 SKMS에 대한 더 풍성한 이야기를 나눠보세요!
+          </p>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <button type="button" class="btn" id="mGoErrc" style="background:var(--blue);color:#fff;">💡 ERRC 실천 제안하러 가기</button>
+            <button type="button" class="btn sub" id="mGoIdeas">💬 Next SKMS 아이디어 나누기</button>
+            <button type="button" class="btn sub" id="mGoOurs" style="background:none;color:var(--ink-3);font-size:0.88rem;padding:8px;">우리의 SKMS 둘러보기</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
 
-  // 각 버튼 클릭 시 해당 화면으로 이동 및 모달 제거
-  modal.querySelector('#mGoErrc').onclick = () => { modal.remove(); historyStack = []; go({ name: 'errc' }); };
-  modal.querySelector('#mGoIdeas').onclick = () => { modal.remove(); historyStack = []; go({ name: 'ideas' }); };
-  modal.querySelector('#mGoOurs').onclick = () => { modal.remove(); historyStack = []; go({ name: 'ours' }); };
-};
+      modal.querySelector('#mGoErrc').onclick = () => { modal.remove(); historyStack = []; go({ name: 'errc' }); };
+      modal.querySelector('#mGoIdeas').onclick = () => { modal.remove(); historyStack = []; go({ name: 'ideas' }); };
+      modal.querySelector('#mGoOurs').onclick = () => { modal.remove(); historyStack = []; go({ name: 'ours' }); };
+    };
 
-const sb = $('#submit'); 
-if (sb) sb.onclick = async () => {
-  let body = ta ? ta.value.trim() : '';
-  if (body === parts[0].trim()) body = '';
-  if (!body) { toast('한 줄을 적어 주세요'); return; }
-  
-  const ix = S.sentences.findIndex(s => s.uid === me.id && s.aid === a.id);
-  const rec = { id: 's_' + me.id + '_' + a.id, uid: me.id, aid: a.id, body, hidden: ix >= 0 ? S.sentences[ix].hidden : false, at: Date.now() };
-  if (ix >= 0) S.sentences[ix] = rec; else S.sentences.push(rec);
-  
-  // 완료 안내 팝업 노출
-  showCompletionModal();
-  await DB.sentence(rec);
-};
+    const sb = $('#submit'); 
+    if (sb) sb.onclick = async () => {
+      let body = ta ? ta.value.trim() : '';
+      if (body === parts[0].trim()) body = '';
+      if (!body) { toast('한 줄을 적어 주세요'); return; }
+      
+      const ix = S.sentences.findIndex(s => s.uid === me.id && s.aid === a.id);
+      const rec = { id: 's_' + me.id + '_' + a.id, uid: me.id, aid: a.id, body, hidden: ix >= 0 ? S.sentences[ix].hidden : false, at: Date.now() };
+      if (ix >= 0) S.sentences[ix] = rec; else S.sentences.push(rec);
+      
+      showCompletionModal();
+      await DB.sentence(rec);
+    };
 
   } else {
     const t = tally(a.id);
@@ -1010,8 +1091,18 @@ function renderResults(app) {
   const byCompany = companyList().map(c => ({ c, n: new Set(S.votes.filter(v => (um[v.uid] || {}).company === c).map(v => v.uid)).size })).filter(x => x.n).sort((x, y) => y.n - x.n);
   const maxC = Math.max(...byCompany.map(x => x.n), 1);
   
+  const aiBrief = getAiResultsBriefing(f);
+
   app.innerHTML = `<div class="step">
     <div class="hero" style="padding-bottom:0"><h1>우리는 SKMS를<br>이렇게 보고 있어요</h1><p>${n}명의 답을 모았어요.</p></div>
+    
+    <!-- AI 종합 브리핑 카드 -->
+    <div class="ai-card dark">
+      <div class="ai-badge">🤖 AI 종합 브리핑</div>
+      <h3>${esc(aiBrief.title)}</h3>
+      <p>${esc(aiBrief.desc)}</p>
+    </div>
+
     <div class="filters">
       <select id="fc"><option value="">모든 회사</option>${companyList().map(c => `<option ${f.company === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
       <select id="ft"><option value="">모든 연차</option>${TENURES.map(c => `<option ${f.tenure === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
@@ -1075,9 +1166,20 @@ function renderOurs(app) {
 function renderERRC(app) {
   const um = umap();
   const canSee = (S && S.settings && S.settings.sentencesPublic) || adminOK;
+  const aiSum = getAiErrcSummary();
   
   app.innerHTML = `<div class="step">
-    <div class="hero" style="padding-bottom:0"><h1>Next SKMS를 위한<br>ERRC 제안</h1><p>새로운 SKMS를 위해 줄일 것, 강화할 것, 새로 시도할 것에 대한 제안입니다.</p></div>
+    <div class="hero" style="padding-bottom:0"><h1>Next SKMS를 위한<br>ERRC 제안</h1><p>New SKMS를 위해 강화할 것, 보완/줄일 것, 새롭게 할 것에 대한 제안입니다.</p></div>
+    
+    <!-- AI 3초 요약 카드 (우측 여백 없이 100% 가로 너비 확장) -->
+    <div class="ai-card">
+      <div class="ai-badge">✨ AI 3초 요약</div>
+      <h3>${esc(aiSum.title)}</h3>
+      <div class="ai-bullets">
+        ${aiSum.bullets.map(b => `<div class="ai-bullet">${esc(b)}</div>`).join('')}
+      </div>
+    </div>
+
     ${ERRC_TOPICS.map(item => {
       const feeds = (S.sentences || []).filter(s => s.aid === item.id && !s.hidden).sort((x, y) => likeCnt(y.id) - likeCnt(x.id) || y.at - x.at);
       const myItem = mySentence(item.id);
@@ -1330,7 +1432,7 @@ function renderMe(app) {
     <div class="sec"><h2>내 답변</h2><span class="tiny">탭하면 변경 가능</span></div>
     ${list.map(a => { const v = myVote(a.id); return `<button type="button" class="merow" data-a="${a.id}" style="width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line)"><div><div class="s">${esc(a.statement)}</div>${v && v.reason ? `<div class="r">${esc(v.reason)}</div>` : ''}</div><span class="mk" style="color:${v ? (v.stance === 'agree' ? 'var(--agree)' : v.stance === 'disagree' ? 'var(--disagree)' : 'var(--ink-2)') : 'var(--ink-4)'}">${v ? SLABEL[v.stance] : '아직'}</span></button>`; }).join('')}
     ${mySentence('final') ? `<div class="mine-box" style="margin-top:18px"><div class="k">종합 한 줄</div><p>${esc(mySentence('final').body)}</p><div class="x"><button type="button" class="btn xs sub" id="editFinal">고치기</button></div></div>` : ''}
-    <!-- 맨 바닥 은밀한 관리자 진입 버튼 -->
+    <!-- 맨 바닥 관리자 진입 버튼 -->
     <div style="margin-top:40px;padding-bottom:20px;text-align:center">
       <button type="button" id="secretAdminBtn" style="background:none;border:none;color:var(--ink-4);font-size:11px;cursor:pointer">ⓒ SKMS Lounge</button>
     </div>
@@ -1343,26 +1445,23 @@ function renderMe(app) {
 
 function csvText(rows) { const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"'; return rows.map(r => r.map(q).join(',')).join('\n'); }
 async function buildExport() {
-  let users = S.users, votes = S.votes, sentences = S.sentences, likes = S.likes, ideas = S.ideas, comments = S.comments;
-  if (REMOTE) {
-    const d = await DB.admin('export', { campaign: C });
-    users = d.users.map(x => ({ id: x.id, name: x.name, company: x.company, tenure: x.tenure, entry: x.entry }));
-    votes = d.votes.map(x => ({ ...x, at: ms(x.at) }));
-    sentences = d.sentences.map(x => ({ ...x, at: ms(x.at) }));
-    likes = d.likes;
-    ideas = (d.ideas || []).map(x => ({ ...x, at: ms(x.at) }));
-    comments = (d.comments || []).map(x => ({ ...x, ideaId: x.idea_id, kind: x.kind || 'comment', at: ms(x.at) }));
-  }
+  const users = S.users || [], votes = S.votes || [], sentences = S.sentences || [], likes = S.likes || [], ideas = S.ideas || [], comments = S.comments || [];
   const um = Object.fromEntries(users.map(u => [u.id, u]));
   const lc = tid => likes.filter(l => l.tid === tid).length;
+  
+  const fmtAt = at => {
+    try { return at ? new Date(at).toISOString() : ''; } catch(e) { return ''; }
+  };
+
   const rows = [['type', 'user_id', 'name', 'company', 'tenure', 'entry', 'agenda_id', 'agenda_tag', 'agenda', 'stance', 'text', 'likes', 'hidden', 'at']];
+
+  votes.forEach(v => { const u = um[v.uid] || {}; const a = agendaById(v.aid) || {}; rows.push(['vote', v.uid, u.name, u.company, u.tenure, u.entry, v.aid, a.tag, a.statement, v.stance, v.reason, lc(v.id), v.hidden ? 'Y' : '', fmtAt(v.at)]); });
+  sentences.forEach(s => { const u = um[s.uid] || {}; const a = agendaById(s.aid) || {}; rows.push(['sentence', s.uid, u.name, u.company, u.tenure, u.entry, s.aid, a.tag, a.prompt, '', s.body, lc(s.id), s.hidden ? 'Y' : '', fmtAt(s.at)]); });
   
-  votes.forEach(v => { const u = um[v.uid] || {}; const a = agendaById(v.aid) || {}; rows.push(['vote', v.uid, u.name, u.company, u.tenure, u.entry, v.aid, a.tag, a.statement, v.stance, v.reason, lc(v.id), v.hidden ? 'Y' : '', new Date(v.at).toISOString()]); });
-  sentences.forEach(s => { const u = um[s.uid] || {}; const a = agendaById(s.aid) || {}; rows.push(['sentence', s.uid, u.name, u.company, u.tenure, u.entry, s.aid, a.tag, a.prompt, '', s.body, lc(s.id), s.hidden ? 'Y' : '', new Date(s.at).toISOString()]); });
   const tpName = id => (((S && S.settings && S.settings.ideaTopics) || DEFAULT_TOPICS).find(t => t.id === id) || {}).title || id;
-  ideas.forEach(i => { const u = um[i.uid] || {}; rows.push(['idea', i.uid, u.name, u.company, u.tenure, u.entry, i.topic, tpName(i.topic), '', '', i.body, lc(i.id), i.hidden ? 'Y' : '', new Date(i.at).toISOString()]); });
-  comments.forEach(c => { const u = um[c.uid] || {}; rows.push(['comment', c.uid, u.name, u.company, u.tenure, u.entry, c.ideaId, c.kind || 'comment', '', '', c.body, lc(c.id), c.hidden ? 'Y' : '', new Date(c.at).toISOString()]); });
-  
+  ideas.forEach(i => { const u = um[i.uid] || {}; rows.push(['idea', i.uid, u.name, u.company, u.tenure, u.entry, i.topic, tpName(i.topic), '', '', i.body, lc(i.id), i.hidden ? 'Y' : '', fmtAt(i.at)]); });
+  comments.forEach(c => { const u = um[c.uid] || {}; rows.push(['comment', c.uid, u.name, u.company, u.tenure, u.entry, c.ideaId, c.kind || 'comment', '', '', c.body, lc(c.id), c.hidden ? 'Y' : '', fmtAt(c.at)]); });
+
   return csvText(rows);
 }
 
@@ -1409,6 +1508,13 @@ function renderAdmin(app) {
       <div class="tile"><div class="k">오늘 참여</div><div class="v num">${days[13].n}<small>명</small></div></div>
       <div class="tile"><div class="k">평균 완주율</div><div class="v num">${completion}<small>%</small></div></div>
       <div class="tile"><div class="k">이유 작성률</div><div class="v num">${withReason}<small>%</small></div></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h3>AI 요약/브리핑 관리</h3>
+        <button class="btn xs" id="refreshAiBtn" type="button">✨ AI 요약 갱신</button>
+      </div>
+      <p class="tiny" style="margin-top:6px;color:var(--ink-2)">최신 사용자 작성 응답 및 데이터를 바탕으로 ERRC 3초 요약과 결과 브리핑 문구를 갱신합니다.</p>
     </div>
     <div class="card"><h3>최근 14일 참여 <span class="tiny">일별 참여자 수</span></h3>
       <div class="spark">${days.map((x, i) => `<i style="height:${Math.max(3, x.n / maxD * 100)}%" class="${i === 13 ? 'today' : ''}" title="${x.d.getMonth() + 1}.${x.d.getDate()} ·${x.n}명"></i>`).join('')}</div>
@@ -1477,6 +1583,17 @@ function renderAdmin(app) {
     
   $('#back').onclick = () => go({ name: 'home' });   $$('[data-at]').forEach(b => b.onclick = () => { view.atab = b.dataset.at; view.editingAgendaId = null; render(); });
   
+  // AI 요약 갱신 버튼 이벤트
+  const refAiBtn = $('#refreshAiBtn');
+  if (refAiBtn) {
+    refAiBtn.onclick = async () => {
+      refreshAiSummaries();
+      toast('AI 요약 및 브리핑이 성공적으로 갱신되었습니다.');
+      render();
+      await DB.saveSettings();
+    };
+  }
+
   // 생각거리 관리 이벤트
   const addBtn = $('#addAgendaBtn');
   if (addBtn) addBtn.onclick = () => { view.editingAgendaId = 'new'; render(); };
@@ -1498,8 +1615,8 @@ function renderAdmin(app) {
       const statement = $('#edStatement').value.trim();
       const context = $('#edContext').value.trim();
       const prompt = $('#edPrompt').value.trim() || '왜 그렇게 생각하세요?';
-const fill = '';
-const active = $('#edActive').value === 'true';
+      const fill = '';
+      const active = $('#edActive').value === 'true';
 
       if (!statement) { toast('질문 문항을 입력해 주세요.'); return; }
 
@@ -1521,9 +1638,29 @@ const active = $('#edActive').value === 'true';
   const cancelAg = $('#cancelAgendaBtn');
   if (cancelAg) cancelAg.onclick = () => { view.editingAgendaId = null; render(); };
 
-  // 데이터 관리 이벤트 (CSV 다운로드 및 초기화)
+  // 데이터 관리 이벤트
   const dl = $('#csvDl'); 
-  if (dl) dl.onclick = async () => { const text = await buildExport(); downloadText('skms_export.csv', text); };
+  if (dl) dl.onclick = async () => {
+    try {
+      const text = await buildExport();
+      const blob = new Blob(['\uFEFF' + text], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const fileName = `SKMS_Lounge_Data_${new Date().toISOString().slice(0, 10)}.csv`;
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast('CSV 데이터 다운로드가 완료되었습니다.');
+    } catch (err) {
+      console.error(err);
+      toast('다운로드 중 오류가 발생했습니다.');
+    }
+  };
 
   const resetBtn = $('#resetDataBtn');
   if (resetBtn) {
